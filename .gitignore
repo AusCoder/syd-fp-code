@@ -1,2 +1,17 @@
 __pycache__/
 node_modules/
+/.idea/
+/project/boot/
+/project/plugins/project
+target/
+lib_managed/
+src_managed/
+test-output/
+test-reports/
+*.iml
+.classpath_nb
+.ensime
+.ensime_cache/
+.projectile
+application.conf.dev
+env.list

@@ -1,0 +1,17 @@
+
+
+We haven't used a class to wrap data, the data is just data.
+
+As much as possible, we have composed the program from independent components.
+
+When we see a sealed trait, we should treat the trait as the type,
+and the case classes are the possibilities of that type.
+
+I claim that these things are actually quite simple,
+they maybe unfamiliar but that is why you come to these talks!
+They are not very complected (in the case of EitherT and Task,
+It just encodes a computation that may fail, nothing more)
+
+
+
+We are kind of using a simple subset of Scala.
