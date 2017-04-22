@@ -16,8 +16,25 @@ object Boot extends ServerApp {
 
   val dispatcher = RequestDispatcher.getSimpleDispatcher("http://localhost:5000")
   val task = dispatcher.dispatch(sampleRequest).run
+  val printedTask = task.map(println)
 
-  task.map(println).unsafePerformSync
+  val many = for {
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+    _ <- printedTask
+  } yield ()
+  many.unsafePerformAsync(_ => ())
 
   def server(args: List[String]): Task[Server] = {
     BlazeBuilder
