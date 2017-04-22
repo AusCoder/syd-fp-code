@@ -52,11 +52,16 @@ def compute(value):
 
 # function that sends the http results
 def send_results(webhook_url, to_send):
+    print(webhook_url)
+    print(to_send)
+
     try:
-        requests.post(webhook_url, json = to_send)
+        headers = {'content-type': 'application/json'}
+        requests.post(webhook_url, json = to_send, headers = headers)
         print(" [x] sent results %s to url %s" % (str(to_send['results']), webhook_url))
-    except:
+    except Exception as e:
         print(" [x] failed to send results to %s" % webhook_url)
+        print(e)
 
 def main():
     # connect to the rabbitmq queue

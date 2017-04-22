@@ -6,8 +6,10 @@ import scalaz._
 import Scalaz._
 import scalaz.concurrent.Task
 
+/**
+  * Class that combines Requests and Results.
+  */
 case class CheckService() {
-// combines the results.
 
   var store: Map[JobId, Request] = Map.empty // make this concurrent hashmap
 
@@ -33,5 +35,8 @@ case class CheckService() {
     Check.run(request, response)
   }
 
-  def reportResults(result: CheckResult): Task[Unit] = ???
+  def reportResults(result: CheckResult): Task[Unit] = Task {
+    // this might report metrics to somewhere and log
+    println(result)
+  }
 }

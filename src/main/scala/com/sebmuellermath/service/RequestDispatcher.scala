@@ -13,7 +13,7 @@ import scalaz.concurrent.Task
 
 
 object EncodeJsonToEntityEncoder {
-  implicit def EntityEncodeRequest[A](implicit jsonEncoder: EncodeJson[A]): EntityEncoder[A] =
+  implicit def EntityEncoderFromEncodeJson[A](implicit jsonEncoder: EncodeJson[A]): EntityEncoder[A] =
     jsonEncoderOf(jsonEncoder)
 }
 
