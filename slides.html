@@ -52,9 +52,11 @@ that hopefully illustrate fundamentals of functional programming.
 
 ---
 
-# Goal
+# Goal:
 
 Test this system.
+
+##Strategy:
 
 1. Send request.
 2. Store request.
@@ -65,8 +67,9 @@ Test this system.
 
 # ADTs
 
-Representing data in code, in the simplest way possible.
-The fundamental building blocks of data structures. Modelling data as logical ands and ors.
+* Representing data in code.
+* Modelling data as logical ands and ors.
+* The fundamental building blocks of data structures.
 
 ### Requests
 ```scala
@@ -92,18 +95,18 @@ case class SuccessfulRequest(request: Request) extends DispatchedRequest
 * Case class are the instances of that data type.
 
 
-This means that we should write functions that look like:
+Functions should look like:
 ```scala
 def log(dispatchedRequest: DispatchedRequest): Unit = ???
 ```
 
-not functions like:
+Not like this:
 ```scala
 def log(successfulRequest: SuccessfulRequest): Unit = ???
 ```
 ^ writing functions like this, we are side skerting the type system.
 Not using it to its full potential.
-This is a quirk of the collision between functional and object oriented programming
+This is an unfortunate quirk of the collision between functional and object oriented programming
 
 ---
 
@@ -122,7 +125,7 @@ case class FailedComputation(id: JobId, message: String) extends Response
 
 # Combinators
 
-Using ADTs makes it easy to write simple combinators:
+We can write simple combinators:
 
 ```scala
 sealed trait DispatchedRequest {
@@ -146,16 +149,22 @@ def submitDispatchedRequest(req: DispatchedRequest): Task[Unit] = Task {
 }
 ```
 
+(we now have data, and some functions to help combine data.
+Now it is time to look at how we can combine data using functions.)
+
 ---
 
 # Pure Functions
 
-Where ever possible, try to write pure functions:
+* Easier to understand
+* Easy to test
+* Less complected than class methods
+* Scala provides powerful combinators to combine them
 
 ```scala
 case class Check(expected: ExpectedResults) {
 
-  def check(request: Request, response: Response): CheckResult = {
+  def runCheck(request: Request, response: Response): CheckResult = {
     val reqVal = request.value
     expected.get(reqVal).fold(
       Pass(request, response))(
@@ -167,11 +176,7 @@ case class Check(expected: ExpectedResults) {
 }
 ```
 
-* Easier to understand
-* Easy to test
-* Naturally segment code
-* Scala provides powerful combinators to combine them
-
+Where ever possible, try to write pure functions:
 
 They tend to be easier to understand.
 They are easier to test, I can just feed in parameters and check the output.
@@ -202,7 +207,7 @@ This translates directly to:
 val response = getJob.flatMap(id => getResponse(id))
 ```
 
-Here we should think of flatMap with the type signature:
+Here, flatMap with the type signature:
 
   `M[A] flatMap (A => M[B]) : M[B]`
 
@@ -210,7 +215,42 @@ In the above, 'M[A] === Throwable \/ A'
 
 ---
 
-# Task
+# scalaz.Task
+
+* Represents async IO operation
+* Serves similar purpose to scala.concurrent.Future
+* Captures description of program without running it
+* Same Task can be run many times
+
+An example:
+
+```scala
+val task = Task.delay(1)
+def multiplyBy2(x: Int): Task[Int] = Task(x * 2)
+def log(x: Int): Task[Unit] = Task(println(x))
+
+...
+
+val program = for {
+  x      <- task
+  result <- multiplyBy2(x)
+  _      <- log(result)
+} yield ()
+program.unsafePerformSync
+```
+
+They can be sequenced together using flatMap and/or for comprehension.
+The above for comprehension desugars to something like:
+`task.flatMap(x => multiplyBy2(x).flatMap(result => log(result).map(_ => ()))`
+
+Here flatMap has the type signature:
+
+```scala
+Task[A] flatMap (A => Task[B]): Task[B]
+```
+
+(I think that reading the type signature gives us a lot of clues about how
+we can compose functions)
 
 Another computation in a context that is very useful is Task.
 It captures the description of a program, without running it.
@@ -221,28 +261,11 @@ it gets run, ie submitted to executor service.)
 (I don't understand the underlying mechanism for how it works, I just know that it works
 and it produces pretty clean code!)
 
-Here is a simple example.
-
-```scala
-val task = Task.delay(1)
-def multiplyBy2(x: Int): Task[Int] = Task(x * 2)
-def log(x: Int): Task[Unit] = Task(println(x))
-
-...
-
-val program = for {
-  x <- task
-  result <- multiplyBy2(x)
-  _ <- log(result)
-} yield ()
-program.unsafePerformSync
-```
-
 ---
 
-# Task
+# scalaz.Task
 
-Here is an example our client testing case:
+* Used by http4s when making or receiving http requests.
 
 ```scala
 // sends the request, holds exceptions that may occur
@@ -253,16 +276,57 @@ def submitRequest(dispatchedRequest: DispatchedRequest): Task[Unit] = ???
 def dispatchAndSubmit(request: Request): Task[Unit] = {
   for {
     dispatched <- dispatch(request)
-    _ <- submitRequest(dispatched)
+    _          <- submitRequest(dispatched)
   } yield ()
 }
 ```
+
+(http4s is a library for making and receiving http requests.
+It makes use of scalaz.Task
+It follows a similar functional mindset to scalaz. (eg separating the description of
+a web server from actually starting a server. This allows for greater composability.))
+
+---
+
+# scalaz.Task
+
+* We use combinators to apply our pure functions to values in Tasks.
+
+```scala
+def liftedRunCheck(request: Request, response: Response): Task[CheckResult] = Task {
+  check.runCheck(request, response)
+}
+
+def submitResponse(response: Response): Task[Unit] = {
+  store.get(response.id).fold(
+    Task(println("response with no matching request")))(
+    request => liftedRunCheck(request, response).flatMap(reportResults)
+  )
+}
+
+def reportResults(result: CheckResult): Task[Unit] = Task {
+  println(result)
+}
+```
+
+(here I am taking my pure function `runCheck` and lifting it into a Task.
+When this is run, it will execute the function and the result will be held in a Tak.
+From there, I am reporting the result.
+The important bit is that everything it happening inside a Task. We are using the combinators
+(mainly flatMap) on Task to sequence the computations together.)
 
 ---
 
 # Final thoughts
 
+Given a problem, think about how to represent it using types.
+(the simpler the better!)
+
+Think about how data moves through a program.
+(This naturally tells us what pure functions we might need.)
+
 Read the types!
+(they give a lot of clues to what things do, and how to compose them)
 
 
     </textarea>

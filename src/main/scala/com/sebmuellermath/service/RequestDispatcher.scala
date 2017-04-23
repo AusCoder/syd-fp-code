@@ -12,17 +12,23 @@ import Scalaz._
 import scalaz.concurrent.Task
 
 
+/**
+  * implicit that is used to convert an argonaut EncodeJson[A]
+  * to an http4s EntityEncoder[A]
+  */
 object EncodeJsonToEntityEncoder {
   implicit def EntityEncoderFromEncodeJson[A](implicit jsonEncoder: EncodeJson[A]): EntityEncoder[A] =
     jsonEncoderOf(jsonEncoder)
 }
 
+/**
+  * Dispatches Requests and submits them to a check service
+  */
 case class RequestDispatcher(baseUrlStr: String, httpClient: Client, checkService: CheckService) {
   import EncodeJsonToEntityEncoder._ // import the function to convert EncodeJson to EntityEncoder
   import Request._ // import the implicit CodecRequest
 
-  // parse the uri string, wrapping any errors into the fail side of a Task.
-  // an alternative is to use EitherT[Task, Throwable, _]
+  /* parse the uri string, wrapping errors into a Task that will fail*/
   val baseUrl: Task[Uri] =
     Uri.fromString(baseUrlStr + "/compute-fibonaccis").fold(
       failure => Task.fail(new Exception(failure.details)),
@@ -37,8 +43,7 @@ case class RequestDispatcher(baseUrlStr: String, httpClient: Client, checkServic
       _           <- httpClient.expect[String](reqWithBody)
     } yield SuccessfulRequest(request)
 
-    // this catches any errors that occurred in the task
-    // and wraps them into our ADT
+    /* catch errors and wrap into our ADT */
     task.attempt.map(_.fold(
       e => FailedRequest(e),
       identity
@@ -53,6 +58,9 @@ case class RequestDispatcher(baseUrlStr: String, httpClient: Client, checkServic
   }
 }
 
+/**
+  * Factory method that provides SimpleHttp1Client
+  */
 object RequestDispatcher {
   def getSimpleDispatcher(baseUrlStr: String, checkService: CheckService) =
     RequestDispatcher(baseUrlStr, SimpleHttp1Client(), checkService)

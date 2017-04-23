@@ -8,7 +8,7 @@ import com.sebmuellermath.domain._
   */
 case class Check(expected: ExpectedResults) {
 
-  def check(request: Request, response: Response): CheckResult = {
+  def runCheck(request: Request, response: Response): CheckResult = {
     val reqVal = request.value
     expected.get(reqVal).fold(
       Pass(request, response))(
@@ -27,8 +27,8 @@ object Check {
     10 -> List(0,1,1,2,3,5,8)
   )
 
-  def checkWithPreloadedResults(req: Request, res: Response): CheckResult = {
-    Check(preloadedResults).check(req, res)
+  def checkWithPreloadedResults: Check = {
+    Check(preloadedResults)
   }
 }
 

@@ -1,6 +1,6 @@
 package com.sebmuellermath
 
-import com.sebmuellermath.service.{CheckService, RequestDispatcher, WebhookServer}
+import com.sebmuellermath.service.{CheckService, RequestDispatcher, WebhookService}
 import com.sebmuellermath.domain.{DispatchedRequest, JobId, Request}
 import org.http4s.server.blaze.BlazeBuilder
 import org.http4s.server.{Server, ServerApp}
@@ -16,7 +16,7 @@ object Boot extends ServerApp {
 
   val checkService = CheckService()
   val dispatcher = RequestDispatcher.getSimpleDispatcher("http://localhost:5000", checkService)
-  val webhookService = WebhookServer(checkService)
+  val webhookService = WebhookService(checkService)
 
   val task = dispatcher.dispatchAndSubmit(sampleRequest)
   val many = for {

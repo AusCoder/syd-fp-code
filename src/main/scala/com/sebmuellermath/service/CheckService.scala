@@ -9,7 +9,7 @@ import scalaz.concurrent.Task
 /**
   * Class that combines DispatchedRequests and Results.
   */
-case class CheckService() {
+case class CheckService(check: Check) {
 
   var store: Map[JobId, Request] = Map.empty // make this concurrent hashmap
 
@@ -20,15 +20,15 @@ case class CheckService() {
     )
   }
 
+  def liftedRunCheck(request: Request, response: Response): Task[CheckResult] = Task {
+    check.runCheck(request, response)
+  }
+
   def submitResponse(response: Response): Task[Unit] = {
     store.get(response.id).fold(
       Task(println("response with no matching request")))(
-      request => runCheck(request, response).flatMap(reportResults)
+      request => liftedRunCheck(request, response).flatMap(reportResults)
     )
-  }
-
-  def runCheck(request: Request, response: Response): Task[CheckResult] = Task {
-    Check.checkWithPreloadedResults(request, response)
   }
 
   def reportResults(result: CheckResult): Task[Unit] = Task {
