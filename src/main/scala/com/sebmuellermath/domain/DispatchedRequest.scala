@@ -1,7 +1,11 @@
 package com.sebmuellermath.domain
 
-sealed trait DispatchedRequest
-// maybe make this a String
-case class FailedDispatchRequest(e: Throwable) extends DispatchedRequest
-case class SuccessfullyDispatchedRequest(request: Request) extends DispatchedRequest
+sealed trait DispatchedRequest {
+  def fold[A](failed: Throwable => A, success: Request => A): A = this match {
+    case FailedRequest(e)       => failed(e)
+    case SuccessfulRequest(req) => success(req)
+  }
+}
+case class FailedRequest(e: Throwable) extends DispatchedRequest
+case class SuccessfulRequest(request: Request) extends DispatchedRequest
 

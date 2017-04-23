@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Useful Scala
+
+---
+
+# Agenda
+
+1. Motivation
+1. Example System
+1. ADTs
+1. Pure functions
+1. Sequencing Computation
+
+---
+
+# Motivation
+
+Scala gives us a lot of language features and libraries to use.
+
+It can be overwhelming.
+
+My main goal here is to run through a simple program, and show some basic ways of thinking
+that hopefully illustrate fundamentals of functional programming.
+
+---
+
+# Example system
+
+.center[![Right-aligned image](https://s3-us-west-2.amazonaws.com/stone-for-rock/Diagram.png)]
+
+---
+
+# Goal
+
+Test this system.
+
+1. Send request.
+2. Store request.
+3. Get response.
+4. Check result was correct.
+
+---
+
+# ADTs
+
+Representing data in code, in the simplest way possible.
+The fundamental building blocks of data structures. Modelling data as logical ands and ors.
+
+### Requests
+```scala
+case class Request(id: JobId, value: Int, webhookUrl: String)
+
+case class JobId(value: String)
+```
+
+These exist independent of any http connections that may exist
+
+---
+
+# ADTs
+
+### Requests that have been sent
+```scala
+sealed trait DispatchedRequest
+case class FailedRequest(e: Throwable) extends DispatchedRequest
+case class SuccessfulRequest(request: Request) extends DispatchedRequest
+```
+
+* DispatchedRequest is the data type
+* Case class are the instances of that data type.
+
+
+This means that we should write functions that look like:
+```scala
+def log(dispatchedRequest: DispatchedRequest): Unit = ???
+```
+
+not functions like:
+```scala
+def log(successfulRequest: SuccessfulRequest): Unit = ???
+```
+^ writing functions like this, we are side skerting the type system.
+Not using it to its full potential.
+This is a quirk of the collision between functional and object oriented programming
+
+---
+
+# ADTs
+
+### Responses
+```scala
+sealed trait Response {
+  val id: JobId
+}
+case class CompletedComputation(id: JobId, results: List[Int]) extends Response
+case class FailedComputation(id: JobId, message: String) extends Response
+```
+
+---
+
+# Combinators
+
+Using ADTs makes it easy to write simple combinators:
+
+```scala
+sealed trait DispatchedRequest {
+  def fold[A](failed: Throwable => A, success: Request => A): A = this match {
+    case FailedRequest(e)       => failed(e)
+    case SuccessfulRequest(req) => success(req)
+  }
+}
+case class FailedRequest(e: Throwable) extends DispatchedRequest
+case class SuccessfulRequest(request: Request) extends DispatchedRequest
+```
+
+For example:
+
+```scala
+def submitDispatchedRequest(req: DispatchedRequest): Task[Unit] = Task {
+  req.fold(
+    e   => println(s"error dispatching request: $e"),
+    req => store = store + (req.id -> req)
+  )
+}
+```
+
+---
+
+# Pure Functions
+
+Where ever possible, try to write pure functions:
+
+```scala
+case class Check(expected: ExpectedResults) {
+
+  def check(request: Request, response: Response): CheckResult = {
+    val reqVal = request.value
+    expected.get(reqVal).fold(
+      Pass(request, response))(
+      vals =>
+        // put more here
+        Pass(request, response)
+    )
+  }
+}
+```
+
+* Easier to understand
+* Easy to test
+* Naturally segment code
+* Scala provides powerful combinators to combine them
+
+
+They tend to be easier to understand.
+They are easier to test, I can just feed in parameters and check the output.
+Scala's functional combinators makes it easy to apply them (as we will see).
+They can also be easily combined with a almost all Scala combinators.
+
+---
+
+# Sequencing Computation
+
+Lets you combine computations that are happening in a context. Examples:
+
+```scala
+def getJobId: Throwable \/ JobId = ???
+def getResponse(id: JobId): Throwable \/ Response = ???
+
+...
+
+val response: Throwable \/ Response = for {
+  id   <- getJobId
+  resp <- getResponse(id)
+} yield resp
+```
+
+This translates directly to:
+
+```scala
+val response = getJob.flatMap(id => getResponse(id))
+```
+
+Here we should think of flatMap with the type signature:
+
+  `M[A] flatMap (A => M[B]) : M[B]`
+
+In the above, 'M[A] === Throwable \/ A'
+
+---
+
+# Task
+
+Another computation in a context that is very useful is Task.
+It captures the description of a program, without running it.
+The running of the program happens at the edge of your program.
+(Makes it easier to think about what the task is doing, versus when
+it gets run, ie submitted to executor service.)
+
+(I don't understand the underlying mechanism for how it works, I just know that it works
+and it produces pretty clean code!)
+
+Here is a simple example.
+
+```scala
+val task = Task.delay(1)
+def multiplyBy2(x: Int): Task[Int] = Task(x * 2)
+def log(x: Int): Task[Unit] = Task(println(x))
+
+...
+
+val program = for {
+  x <- task
+  result <- multiplyBy2(x)
+  _ <- log(result)
+} yield ()
+program.unsafePerformSync
+```
+
+---
+
+# Task
+
+Here is an example our client testing case:
+
+```scala
+// sends the request, holds exceptions that may occur
+def dispatch(request: Request): Task[DispatchedRequest] = ???
+...
+def submitRequest(dispatchedRequest: DispatchedRequest): Task[Unit] = ???
+...
+def dispatchAndSubmit(request: Request): Task[Unit] = {
+  for {
+    dispatched <- dispatch(request)
+    _ <- submitRequest(dispatched)
+  } yield ()
+}
+```
+
+---
+
+# Final thoughts
+
+Read the types!
+
+
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>

@@ -1,9 +1,7 @@
 package com.sebmuellermath.domain
 
-import java.net.URL
 import argonaut._
 import Argonaut._
-import org.http4s.EntityEncoder
 import org.http4s.argonaut._
 
 case class JobId(value: String)

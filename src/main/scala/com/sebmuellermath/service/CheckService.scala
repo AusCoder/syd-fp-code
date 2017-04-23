@@ -7,21 +7,17 @@ import Scalaz._
 import scalaz.concurrent.Task
 
 /**
-  * Class that combines Requests and Results.
+  * Class that combines DispatchedRequests and Results.
   */
 case class CheckService() {
 
   var store: Map[JobId, Request] = Map.empty // make this concurrent hashmap
 
-  def submitRequest(request: DispatchedRequest): Task[Unit] = Task {
-    request match {
-      case SuccessfullyDispatchedRequest(req) => {
-        store = store + (req.id -> req) // not thread safe
-      }
-      case FailedDispatchRequest(e) => {
-        println(s"error dispatching request: $e")
-      }
-    }
+  def submitDispatchedRequest(dispatchedRequest: DispatchedRequest): Task[Unit] = Task {
+    dispatchedRequest.fold(
+      e => println(s"error dispatching request: $e"),
+      req => store = store + (req.id -> req)
+    )
   }
 
   def submitResponse(response: Response): Task[Unit] = {
@@ -32,11 +28,10 @@ case class CheckService() {
   }
 
   def runCheck(request: Request, response: Response): Task[CheckResult] = Task {
-    Check.run(request, response)
+    Check.checkWithPreloadedResults(request, response)
   }
 
   def reportResults(result: CheckResult): Task[Unit] = Task {
-    // this might report metrics to somewhere and log
     println(result)
   }
 }

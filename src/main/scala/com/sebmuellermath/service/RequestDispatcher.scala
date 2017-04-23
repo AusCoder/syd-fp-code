@@ -17,25 +17,43 @@ object EncodeJsonToEntityEncoder {
     jsonEncoderOf(jsonEncoder)
 }
 
-case class RequestDispatcher(baseUrlStr: String, httpClient: Client) {
+case class RequestDispatcher(baseUrlStr: String, httpClient: Client, checkService: CheckService) {
   import EncodeJsonToEntityEncoder._ // import the function to convert EncodeJson to EntityEncoder
   import Request._ // import the implicit CodecRequest
 
-  val baseUrl: EitherT[Task, Throwable, Uri] =
-    EitherT.fromDisjunction[Task](Uri.fromString(baseUrlStr + "/compute-fibonaccis"))
-      .leftMap(failure => new Exception(s"Failed to parse url: ${failure.sanitized}"))
+  // parse the uri string, wrapping any errors into the fail side of a Task.
+  // an alternative is to use EitherT[Task, Throwable, _]
+  val baseUrl: Task[Uri] =
+    Uri.fromString(baseUrlStr + "/compute-fibonaccis").fold(
+      failure => Task.fail(new Exception(failure.details)),
+      uri => Task.delay(uri)
+    )
 
-  def dispatch(request: Request): EitherT[Task, Throwable, String] = {
+  def dispatch(request: Request): Task[DispatchedRequest] = {
+    val task = for {
+      url         <- baseUrl
+      req         = HttpRequest(Method.POST, url)
+      reqWithBody <- req.withBody(request)
+      _           <- httpClient.expect[String](reqWithBody)
+    } yield SuccessfulRequest(request)
+
+    // this catches any errors that occurred in the task
+    // and wraps them into our ADT
+    task.attempt.map(_.fold(
+      e => FailedRequest(e),
+      identity
+    ))
+  }
+
+  def dispatchAndSubmit(request: Request): Task[DispatchedRequest] = {
     for {
-      url <- baseUrl
-      req = HttpRequest(Method.POST, url)
-      reqWithBody <- EitherT.eitherT(req.withBody(request).attempt)
-      resp <- EitherT.eitherT(httpClient.expect[String](reqWithBody).attempt)
-    } yield resp
+      disp <- dispatch(request)
+      _    <- checkService.submitDispatchedRequest(disp)
+    } yield disp
   }
 }
 
 object RequestDispatcher {
-  def getSimpleDispatcher(baseUrlStr: String) =
-    RequestDispatcher(baseUrlStr, SimpleHttp1Client())
+  def getSimpleDispatcher(baseUrlStr: String, checkService: CheckService) =
+    RequestDispatcher(baseUrlStr, SimpleHttp1Client(), checkService)
 }

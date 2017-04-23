@@ -16,15 +16,17 @@ object DecodeJsonToEntityDecoder {
   }
 }
 
-object WebhookServer {
+case class WebhookServer(checkService: CheckService) {
   import DecodeJsonToEntityDecoder._
   import Response._
 
   val service: HttpService = HttpService {
 
     case req @ POST -> Root / "results" => req.decode[Response] { response =>
-      println(response)
-      Ok()
+      for {
+        _ <- checkService.submitResponse(response)
+        x <- Ok()
+      } yield x
     }
 
     case GET -> Root / "test" => {
