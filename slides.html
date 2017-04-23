@@ -21,7 +21,7 @@
 
 class: center, middle
 
-# Useful Scala
+# Example using Scala
 
 ---
 
@@ -293,9 +293,10 @@ a web server from actually starting a server. This allows for greater composabil
 * We use combinators to apply our pure functions to values in Tasks.
 
 ```scala
-def liftedRunCheck(request: Request, response: Response): Task[CheckResult] = Task {
-  check.runCheck(request, response)
-}
+def liftedRunCheck(request: Request, response: Response): Task[CheckResult] =
+  Task {
+    check.runCheck(request, response)
+  }
 
 def submitResponse(response: Response): Task[Unit] = {
   store.get(response.id).fold(
