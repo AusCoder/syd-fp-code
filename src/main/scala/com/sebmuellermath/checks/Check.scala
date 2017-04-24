@@ -9,8 +9,9 @@ import com.sebmuellermath.domain._
 case class Check(expected: ExpectedResults) {
 
   def runCheck(request: Request, response: Response): CheckResult = {
-    val reqVal = request.value
-    expected.get(reqVal).fold[CheckResult](
+    val reqVal: Int = request.value
+    val expectedResultsOpt: Option[List[Int]] = expected.get(reqVal)
+    expectedResultsOpt.fold[CheckResult](
       Pass(request, response))(
       vals =>
         response match {

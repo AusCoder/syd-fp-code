@@ -29,8 +29,8 @@ class: center, middle
 
 - Me: Sebastian Mueller
 
-- From: ImageIntelligence
-  - We use Scala for our backend services.
+- Work at: ImageIntelligence
+  - Use Scala for our backend services.
 
 - Code/Slides: https://github.com/AusCoder/syd-fp-code
 
@@ -51,6 +51,10 @@ class: center, middle
 Scala gives us a lot of language features and libraries to use.
 
 It can be overwhelming.
+
+I want to show a program that uses the parts of Scala that I think are valuable.
+
+???
 
 My main goal here is to run through a simple program, and show some basic ways of thinking
 that hopefully illustrate fundamentals of functional programming.
@@ -89,13 +93,15 @@ case class Request(id: JobId, value: Int, webhookUrl: String)
 case class JobId(value: String)
 ```
 
+???
+
 These exist independent of any http connections that may exist
 
 ---
 
 # ADTs
 
-### Requests that have been sent
+### DispatchedRequests
 ```scala
 sealed trait DispatchedRequest
 case class FailedRequest(e: Throwable) extends DispatchedRequest
@@ -104,6 +110,7 @@ case class SuccessfulRequest(request: Request) extends DispatchedRequest
 
 * DispatchedRequest is the data type
 * Case class are the instances of that data type.
+
 
 
 Functions should look like:
@@ -115,6 +122,9 @@ Not like this:
 ```scala
 def log(successfulRequest: SuccessfulRequest): Unit = ???
 ```
+
+???
+
 ^ writing functions like this, we are side skerting the type system.
 Not using it to its full potential.
 This is an unfortunate quirk of the collision between functional and object oriented programming
@@ -152,16 +162,22 @@ case class SuccessfulRequest(request: Request) extends DispatchedRequest
 For example:
 
 ```scala
-def submitDispatchedRequest(req: DispatchedRequest): Task[Unit] = Task {
-  req.fold(
-    e   => println(s"error dispatching request: $e"),
-    req => store = store + (req.id -> req)
-  )
-}
+def submitDispatchedRequest(dispatchedRequest: DispatchedRequest): Task[Unit] =
+  Task {
+    dispatchedRequest.fold(
+      e => println(s"error dispatching request: $e"),
+      req => {
+        store.put(req.id, req)
+        ()
+      }
+    )
+  }
 ```
 
-(we now have data, and some functions to help combine data.
-Now it is time to look at how we can combine data using functions.)
+???
+
+we now have data, and some functions to help combine data.
+Now it is time to look at how we can combine data using functions.
 
 ---
 
@@ -169,23 +185,30 @@ Now it is time to look at how we can combine data using functions.)
 
 * Easier to understand
 * Easy to test
-* Less complected than class methods
 * Scala provides powerful combinators to combine them
 
 ```scala
 case class Check(expected: ExpectedResults) {
 
   def runCheck(request: Request, response: Response): CheckResult = {
-    val reqVal = request.value
-    expected.get(reqVal).fold(
+    val reqVal: Int = request.value
+    val expectedResultsOpt: Option[List[Int]] = expected.get(reqVal)
+    expectedResultsOpt.fold[CheckResult](
       Pass(request, response))(
       vals =>
-        // put more here
-        Pass(request, response)
+        response match {
+          case FailedComputation(_, _) => Fail(request, response, "received failed computaiton")
+          case CompletedComputation(_, results) => {
+            if (vals == results) Pass(request, response)
+            else Fail(request, response, "values didn't match")
+          }
+        }
     )
   }
 }
 ```
+
+???
 
 Where ever possible, try to write pure functions:
 
@@ -198,7 +221,7 @@ They can also be easily combined with a almost all Scala combinators.
 
 # Sequencing Computation
 
-Lets you combine computations that are happening in a context. Examples:
+* Combine computations that are happening in a context.
 
 ```scala
 def getJobId: Throwable \/ JobId = ???
@@ -218,9 +241,11 @@ This translates directly to:
 val response = getJob.flatMap(id => getResponse(id))
 ```
 
-Here, flatMap with the type signature:
+flatMap type:
 
-  `M[A] flatMap (A => M[B]) : M[B]`
+  `(Throwable \/ A) flatMap (A => (Throwable \/ B)) : (Throwable \/ B)`
+
+???
 
 In the above, 'M[A] === Throwable \/ A'
 
@@ -232,8 +257,6 @@ In the above, 'M[A] === Throwable \/ A'
 * Serves similar purpose to scala.concurrent.Future
 * Captures description of program without running it
 * Same Task can be run many times
-
-An example:
 
 ```scala
 val task = Task.delay(1)
@@ -250,6 +273,14 @@ val program = for {
 program.unsafePerformSync
 ```
 
+flatMap has this type signature:
+
+```scala
+Task[A] flatMap (A => Task[B]): Task[B]
+```
+
+???
+
 They can be sequenced together using flatMap and/or for comprehension.
 The above for comprehension desugars to something like:
 `task.flatMap(x => multiplyBy2(x).flatMap(result => log(result).map(_ => ()))`
@@ -260,7 +291,9 @@ Here flatMap has the type signature:
 Task[A] flatMap (A => Task[B]): Task[B]
 ```
 
-(I think that reading the type signature gives us a lot of clues about how
+???
+
+I think that reading the type signature gives us a lot of clues about how
 we can compose functions)
 
 Another computation in a context that is very useful is Task.
@@ -270,7 +303,7 @@ The running of the program happens at the edge of your program.
 it gets run, ie submitted to executor service.)
 
 (I don't understand the underlying mechanism for how it works, I just know that it works
-and it produces pretty clean code!)
+and it produces pretty clean code!
 
 ---
 
@@ -292,10 +325,12 @@ def dispatchAndSubmit(request: Request): Task[Unit] = {
 }
 ```
 
-(http4s is a library for making and receiving http requests.
+???
+
+http4s is a library for making and receiving http requests.
 It makes use of scalaz.Task
 It follows a similar functional mindset to scalaz. (eg separating the description of
-a web server from actually starting a server. This allows for greater composability.))
+a web server from actually starting a server. This allows for greater composability.)
 
 ---
 
@@ -310,7 +345,7 @@ def liftedRunCheck(request: Request, response: Response): Task[CheckResult] =
   }
 
 def submitResponse(response: Response): Task[Unit] = {
-  store.get(response.id).fold(
+  getFromStore(response.id).fold(
     Task(println("response with no matching request")))(
     request => liftedRunCheck(request, response).flatMap(reportResults)
   )
@@ -321,24 +356,32 @@ def reportResults(result: CheckResult): Task[Unit] = Task {
 }
 ```
 
-(here I am taking my pure function `runCheck` and lifting it into a Task.
+???
+
+here I am taking my pure function `runCheck` and lifting it into a Task.
 When this is run, it will execute the function and the result will be held in a Tak.
 From there, I am reporting the result.
 The important bit is that everything it happening inside a Task. We are using the combinators
-(mainly flatMap) on Task to sequence the computations together.)
+(mainly flatMap) on Task to sequence the computations together.
 
 ---
 
 # Final thoughts
 
 Given a problem, think about how to represent it using types.
-(the simpler the better!)
 
 Think about how data moves through a program.
-(This naturally tells us what pure functions we might need.)
 
 Read the types!
-(they give a lot of clues to what things do, and how to compose them)
+
+???
+
+Simple is great
+
+Gives clues about what functions will be needed
+
+
+they give a lot of clues to what things do, and how to compose them
 
 
     </textarea>
