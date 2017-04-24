@@ -10,11 +10,16 @@ case class Check(expected: ExpectedResults) {
 
   def runCheck(request: Request, response: Response): CheckResult = {
     val reqVal = request.value
-    expected.get(reqVal).fold(
+    expected.get(reqVal).fold[CheckResult](
       Pass(request, response))(
       vals =>
-        // put more here
-        Pass(request, response)
+        response match {
+          case FailedComputation(_, _) => Fail(request, response, "received failed computaiton")
+          case CompletedComputation(_, results) => {
+            if (vals == results) Pass(request, response)
+            else Fail(request, response, "values didn't match")
+          }
+        }
     )
   }
 }

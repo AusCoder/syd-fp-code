@@ -16,7 +16,7 @@ import fs2.interop.scalaz._
 
 object Boot extends ServerApp {
   val webhookUrl = "http://localhost:37047/results"
-  val sampleRequest = Request(JobId("1"), 50, webhookUrl)
+  val sampleRequest = Request(JobId("1"), 10, webhookUrl)
   implicit val S = Scheduler.fromFixedDaemonPool(5) // required by awakeEvery
 
   val checks = Check.checkWithPreloadedResults
@@ -30,7 +30,7 @@ object Boot extends ServerApp {
       .map(_._2)
       .map(_.toString)
       .map(JobId.apply)
-      .map(id => Request(id, 50, webhookUrl))
+      .map(id => Request(id, 10, webhookUrl))
       .flatMap(req => Stream.eval(dispatcher.dispatchAndSubmit(req)))
   }
 
